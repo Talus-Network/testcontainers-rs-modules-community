@@ -52,6 +52,7 @@ postgres = []
 rabbitmq = []
 redis = []
 solr = []
+sui = ["http_wait"]
 surrealdb = []
 trufflesuite_ganachecli = []
 victoria_metrics = []
@@ -73,7 +74,10 @@ rcgen = { version = "0.13.1", features = [
 serde = { version = "1.0.217", features = ["derive"], optional = true }
 serde_json = { version = "1.0.138", optional = true }
 testcontainers = { version = "0.23.2" }
-
+reqwest = { version = "0.12.5", features = [
+    "json",
+    "rustls-tls",
+], default-features = false }
 
 [dev-dependencies]
 # Work around feature incompatibility in Chrono and arrow-arith
@@ -173,3 +177,7 @@ required-features = ["nats"]
 [[example]]
 name = "rqlite"
 required-features = ["rqlite"]
+
+[[example]]
+name = "sui"
+required-features = ["sui"]

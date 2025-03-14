@@ -153,6 +153,10 @@ pub mod rqlite;
 #[cfg_attr(docsrs, doc(cfg(feature = "solr")))]
 /// **Apache Solr** (distributed search engine) testcontainer
 pub mod solr;
+#[cfg(feature = "sui")]
+#[cfg_attr(docsrs, doc(cfg(feature = "sui")))]
+/// **Sui** (local blockchain emulator for sui development) testcontainer
+pub mod sui;
 #[cfg(feature = "surrealdb")]
 #[cfg_attr(docsrs, doc(cfg(feature = "surrealdb")))]
 /// **surrealdb** (mutli model database) testcontainer
