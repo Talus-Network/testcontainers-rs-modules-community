@@ -12,7 +12,6 @@ const NAME: &str = "mysten/sui-tools";
 const TAG: &str = "staging-arm64";
 const FULLNODE_RPC_PORT: ContainerPort = ContainerPort::Tcp(9000);
 const FAUCET_PORT: ContainerPort = ContainerPort::Tcp(9123);
-const INDEXER_PORT: ContainerPort = ContainerPort::Tcp(9124);
 const GRAPHQL_PORT: ContainerPort = ContainerPort::Tcp(9125);
 
 /// Community Testcontainers implementation for Sui blockchain.
@@ -47,14 +46,9 @@ pub struct Sui {
     network_config: Option<String>,
     tag: Option<String>,
     with_indexer: bool,
-    indexer_port: Option<u16>,
+    pg_url: Option<String>,
     with_graphql: bool,
     graphql_port: Option<u16>,
-    pg_port: Option<u16>,
-    pg_host: Option<String>,
-    pg_db: Option<String>,
-    pg_user: Option<String>,
-    pg_password: Option<String>,
 }
 
 impl Sui {
@@ -114,9 +108,9 @@ impl Sui {
         self
     }
 
-    /// Optionally specify the indexer port. Defaults to 9124.
-    pub fn with_indexer_port(mut self, port: u16) -> Self {
-        self.indexer_port = Some(port);
+    /// Optionally specify the indexer postgres URL.
+    pub fn with_indexer_pg_url(mut self, url: impl Into<String>) -> Self {
+        self.pg_url = Some(url.into());
         self
     }
 
@@ -129,36 +123,6 @@ impl Sui {
     /// Optionally specify the graphql port. Defaults to 9125.
     pub fn with_graphql_port(mut self, port: u16) -> Self {
         self.graphql_port = Some(port);
-        self
-    }
-
-    /// The postgres port for the indexer to connect to. Defaults to 5432.
-    pub fn with_pg_port(mut self, port: u16) -> Self {
-        self.pg_port = Some(port);
-        self
-    }
-
-    /// The postgres host for the indexer to connect to. Defaults to "localhost".
-    pub fn with_pg_host(mut self, host: impl Into<String>) -> Self {
-        self.pg_host = Some(host.into());
-        self
-    }
-
-    /// The postgres database name for the indexer to connect to. Defaults to "sui_indexer".
-    pub fn with_pg_db(mut self, db: impl Into<String>) -> Self {
-        self.pg_db = Some(db.into());
-        self
-    }
-
-    /// The postgres user for the indexer to connect to. Defaults to "postgres".
-    pub fn with_pg_user(mut self, user: impl Into<String>) -> Self {
-        self.pg_user = Some(user.into());
-        self
-    }
-
-    /// The postgres password for the indexer to connect to. Defaults to "postgrespw".
-    pub fn with_pg_password(mut self, password: impl Into<String>) -> Self {
-        self.pg_password = Some(password.into());
         self
     }
 }
@@ -199,36 +163,11 @@ impl Image for Sui {
         }
 
         if self.with_indexer {
-            if let Some(port) = self.indexer_port {
-                // When a port is provided, use the syntax `--with-indexer=<INDEXER_PORT>`
-                cmd.push(format!("--with-indexer={}", port));
+            if let Some(url) = &self.pg_url {
+                // When a URL is provided, use the syntax `--with-indexer=<INDEXER_URL>`
+                cmd.push(format!("--with-indexer={}", url));
             } else {
                 cmd.push("--with-indexer".to_string());
-            }
-
-            if let Some(pg_port) = self.pg_port {
-                cmd.push("--pg-port".to_string());
-                cmd.push(pg_port.to_string());
-            }
-
-            if let Some(ref pg_host) = self.pg_host {
-                cmd.push("--pg-host".to_string());
-                cmd.push(pg_host.clone());
-            }
-
-            if let Some(ref pg_db) = self.pg_db {
-                cmd.push("--pg-db-name".to_string());
-                cmd.push(pg_db.clone());
-            }
-
-            if let Some(ref pg_user) = self.pg_user {
-                cmd.push("--pg-user".to_string());
-                cmd.push(pg_user.clone());
-            }
-
-            if let Some(ref pg_password) = self.pg_password {
-                cmd.push("--pg-password".to_string());
-                cmd.push(pg_password.clone());
             }
         }
 
@@ -253,9 +192,9 @@ impl Image for Sui {
     ) -> impl IntoIterator<Item = (impl Into<Cow<'_, str>>, impl Into<Cow<'_, str>>)> {
         vec![("RUST_LOG".to_string(), "warning,sui_node=info".to_string())].into_iter()
     }
+
     fn expose_ports(&self) -> &[ContainerPort] {
-        static PORTS: [ContainerPort; 4] =
-            [FULLNODE_RPC_PORT, FAUCET_PORT, INDEXER_PORT, GRAPHQL_PORT];
+        static PORTS: [ContainerPort; 3] = [FULLNODE_RPC_PORT, FAUCET_PORT, GRAPHQL_PORT];
         &PORTS
     }
 
@@ -291,14 +230,9 @@ mod tests {
             .with_fullnode_rpc_port(8000)
             .with_epoch_duration_ms(60000)
             .with_indexer(true)
-            .with_indexer_port(9124)
+            .with_indexer_pg_url("postgres://user:pass@host:5432/db")
             .with_graphql(true)
-            .with_graphql_port(9125)
-            .with_pg_port(5432)
-            .with_pg_host("localhost")
-            .with_pg_db("sui_indexer")
-            .with_pg_user("postgres")
-            .with_pg_password("postgrespw");
+            .with_graphql_port(9125);
 
         let cmd: Vec<String> = node
             .cmd()
@@ -316,18 +250,8 @@ mod tests {
                 "8000",
                 "--epoch-duration-ms",
                 "60000",
-                "--with-indexer=9124",
+                "--with-indexer=postgres://user:pass@host:5432/db",
                 "--with-graphql=9125",
-                "--pg-port",
-                "5432",
-                "--pg-host",
-                "localhost",
-                "--pg-db",
-                "sui_indexer",
-                "--pg-user",
-                "postgres",
-                "--pg-password",
-                "postgrespw",
             ]
         );
         assert_eq!(node.entrypoint(), Some("sui"));
@@ -362,11 +286,10 @@ mod tests {
     fn test_expose_ports() {
         let node = Sui::default();
         let ports = node.expose_ports();
-        assert_eq!(ports.len(), 4);
+        assert_eq!(ports.len(), 3);
         assert_eq!(ports[0], FULLNODE_RPC_PORT);
         assert_eq!(ports[1], FAUCET_PORT);
-        assert_eq!(ports[2], INDEXER_PORT);
-        assert_eq!(ports[3], GRAPHQL_PORT);
+        assert_eq!(ports[2], GRAPHQL_PORT);
     }
 
     #[test]
